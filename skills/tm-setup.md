@@ -235,47 +235,28 @@ data_source_id を `META_DSID` として保持。
 
 **親ページの上書きはしない**（ユーザーの既存コンテンツを破壊しないため、必ず新規サブページとして作成）。
 
-### 6.5.1. ダッシュボードページ本体の作成
+### 手順の全体像（重要）
+
+`notion-create-view` で `parent_page_id` を指定すると、**埋め込みビューはページ末尾に追加される**仕様。ヘッダー直下にビューを置きたい場合は以下の4段階で作る:
+
+1. ダッシュボードページを最小内容で作成（タイトルのみ）
+2. 埋め込みビュー2つを作成（ページ末尾に追加される）
+3. ページを `notion-fetch` して、各埋め込みビューの `<database url="...">` 値を取得
+4. `notion-update-page(command="replace_content")` で、取得したURLを含めた最終構造に書き換え
+
+これをやらないと「プレースホルダーテキストの下にビューが無く、ページ末尾にビューが並ぶ」見た目になる。
+
+### 6.5.1. ダッシュボードページの最小作成
 
 `notion-create-pages`（parent: `page_id=<親ページID>`、つまり手順1で受け取ったページ）で以下を作成:
 
 - properties: `title: "📋 案件管理"`
 - icon: `📋`
-- content (Markdown):
-
-```markdown
-# 📋 案件管理
-
-メールから案件を自動取り込み、Notion で進捗管理するハブページです。
-
-## 🚀 使い方
-
-- **朝の動き出し**: 下のボードで 🔴 自社対応中 のカードを確認
-- **メール取り込み**: Claude Desktop で `/tm-sync` を実行
-- **詳しい操作**: `/tm-help` または USAGE.md 参照
-
----
-
-## 🎯 今動くべき案件（ボール別）
-
-（↓ ボール別ボードがここに埋め込まれます）
-
----
-
-## 📋 全案件一覧
-
-（↓ 全案件一覧がここに埋め込まれます）
-
----
-
-## ⚙️ 設定・サブデータベース
-
-タレント／クライアント／メタ情報の管理は配下の設定ページにあります。
-```
+- content: 任意（次の手順で全置換するので何でも良い、空文字列でも可）
 
 このページの page_id を `DASHBOARD_PAGE_ID` として保持。
 
-### 6.5.2. 埋め込みリンクビューの追加
+### 6.5.2. 埋め込みリンクビューを2つ追加
 
 `notion-create-view` を `parent_page_id=DASHBOARD_PAGE_ID` 指定で 2 回呼ぶ。`data_source_id` は `DEALS_DSID`。
 
@@ -284,8 +265,9 @@ data_source_id を `META_DSID` として保持。
 > - table 型も列が多いと横スクロール → 表示プロパティを 4 つ程度に絞る
 > - list 型は縦に伸びるだけで横スクロール不要 → ボール別グループはリスト型で実現
 
-**埋め込みビュー1: 🎯 ボール別リスト（埋め込み）**
+**埋め込みビュー1: 🎯 ボール別リスト**
 ```
+name: 🎯 ボール別リスト
 type: list
 configure:
   GROUP BY "ボール所在"
@@ -293,29 +275,75 @@ configure:
   SORT BY "次回アクションの期日" ASC
 ```
 
-ボール所在の値（🔴/🟡/🟢/⚪）で縦にグループ分けされ、各グループ内に案件が縦に並ぶ。横スクロール不要。
-
-**埋め込みビュー2: 📋 全案件一覧（埋め込み）**
+**埋め込みビュー2: 📋 全案件一覧**
 ```
+name: 📋 全案件一覧
 type: table
 configure:
   SHOW "案件名", "ステータス", "ボール所在", "納期"
   SORT BY "最終やり取り日" DESC
 ```
 
-ダッシュボード用の簡易テーブル。4 列だけに絞って横スクロールを防ぐ。詳細は案件カードを開いて確認。フル一覧が欲しい場合は案件DB の「📋 一覧表」ビュー（11列ある）を開く運用に。
+### 6.5.3. ダッシュボードページを fetch してビューURLを取得
 
-ビューはページ末尾に追加されるため、ダッシュボードページの本文を上記マークダウン構造で作っておけば、視覚的には「🚀 使い方 → 🎯 ボール別リスト → 📋 全案件一覧 → ⚙️ 設定リンク」という流れになる。
+`notion-fetch(id=DASHBOARD_PAGE_ID)` を実行。レスポンスのページ本文に以下のような行が2つ含まれる:
 
-### 6.5.3. 設定ページへのリンクを追加
+```
+<database url="https://www.notion.so/<HEX1>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
+<database url="https://www.notion.so/<HEX2>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
+```
 
-ダッシュボードページの末尾に「task-manager 設定」へのサブページ参照を追加するため、`notion-update-page(page_id=DASHBOARD_PAGE_ID, command="insert_content", position={"type":"end"})` で以下を追記:
+順序は作成順 = `<HEX1>` がボール別リスト、`<HEX2>` が全案件一覧。これを `DASHBOARD_VIEW1_URL` / `DASHBOARD_VIEW2_URL` として保持。
+
+### 6.5.4. ページ本文を最終構造に書き換え
+
+`notion-update-page(page_id=DASHBOARD_PAGE_ID, command="replace_content", allow_deleting_content=true, new_str=...)` を以下の内容で実行:
 
 ```markdown
+# 📋 task-manager
+
+メールから案件を自動取り込み、Notion で進捗管理するハブページです。
+
+## 🚀 使い方
+
+- **朝の動き出し**: 下のリストで 🔴 自社対応中 のセクションから確認
+- **メール取り込み**: Claude Desktop で `/tm-sync` を実行
+- **詳しい操作**: `/tm-help` または USAGE.md 参照
+
+---
+
+## 🎯 今動くべき案件（ボール別）
+
+<database url="<DASHBOARD_VIEW1_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
+
+---
+
+## 📋 全案件一覧
+
+<database url="<DASHBOARD_VIEW2_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
+
+---
+
+## ⚙️ 設定・サブデータベース
+
+タレント／クライアント／メタ情報の管理は配下の設定ページにあります。
+
 <page url="<task-manager 設定ページのURL>">task-manager 設定</page>
 ```
 
-これで友人がダッシュボードページを開けば、案件状況が一目で見えつつ、設定ページにも 1 クリックで飛べる状態になる。
+`<DASHBOARD_VIEW1_URL>` / `<DASHBOARD_VIEW2_URL>` / `<DEALS_DSID>` / `<task-manager 設定ページのURL>` は実際の値に置換。これで「🚀 使い方 → 🎯 ボール別リスト → 📋 全案件一覧 → ⚙️ 設定リンク」の順に並ぶ。
+
+### フォールバック
+
+`notion-create-view` が失敗したら（DSL パースエラー等）、ダッシュボードページの本文は手動作成を促す案内に切り替える:
+
+```markdown
+## 🎯 今動くべき案件（ボール別）
+
+Notion 案件DB の「🎯 ボール別ビュー」を直接開いてください: <案件DB のボール別ビュー URL>
+```
+
+ビュー無しでも 案件DB そのものは機能するため、Skill 本体は続行する。
 
 ## 7. メタ情報DB に初期レコードを投入
 
