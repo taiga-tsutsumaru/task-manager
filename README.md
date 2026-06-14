@@ -56,8 +56,9 @@ friend（個人事業の芸能事務所オーナー）の案件管理を、Gmail
 ```
 task manager/
 ├── README.md               このファイル（開発者向け）
-├── スタートガイド.md          friend 向け1枚もの手順書（まずこれを渡す）
-├── SETUP.md                技術詳細のセットアップ手順
+├── スタートガイド.md          friend 向け手順書（md版、配布のメイン）
+├── スタートガイド.pdf         上記の PDF 版（印刷用、Release アセット同梱）
+├── build_pdf.py            md → PDF 変換スクリプト
 ├── USAGE.md                日常リファレンス
 ├── .gitignore
 └── skills/
@@ -98,6 +99,7 @@ uv run --with reportlab python build_pdf.py
 
 ## 変更履歴
 
+- **v1.0.6** (2026-06-14): ドキュメント整理。SETUP.md を削除（スタートガイド.md と内容重複していたため）。配布物は スタートガイド.md / .pdf に一本化。README は開発者向けに専念
 - **v1.0.5** (2026-06-14): 引き渡し前最終テストで複数の重大バグを発見・修正。(1) `notion-search` のクエリ仕様: 汎用語（"案件" 等）では結果ゼロになり、データソース名（"案件DB" 等）を渡すと全件返ることが判明。tm-sync/pending/report/add-talent/add-client の全件取得を修正。(2) `最終sync日時` を DATE 型保存していたため人間編集保護が常時誤動作する不具合を修正。`is_datetime=1` の datetime 保存に。(3) `notion-fetch` には `last_edited_time` 相当のフィールドが無い旨、`notion-search` の `timestamp` を使うこと、API 編集では timestamp が更新されない可能性があり保護ロジックは best-effort であることを明記。(4) メタDB config レコードの取得手順を明確化
 - **v1.0.4** (2026-06-03): 人間編集の保護ロジック追加。`last_edited_time > LAST_SYNC` の案件は動的プロパティ（ボール所在/次回アクション/期日/返信要否）を AI が上書きせず、競合内容を重要メモに記録するだけにする。「朝直したのに翌朝戻ってる」事故を防止
 - **v1.0.3** (2026-05-20): C1-C4 修正。SETUP.md/tm-help.md/tm-setup.md/README.md を Phase 4 状態に同期、Run now の重要性を強調、data_source_id 取得方法を明記、ダッシュボード作成手順を正確化
