@@ -86,6 +86,16 @@ task manager/
 4. description にはトリガー語を含める（friend がどう呼ぶか想像する）
 5. 既存 Skill との重複を避ける（`/tm-help` を更新）
 
+## PDF 版スタートガイドの再生成
+
+`スタートガイド.pdf` は `スタートガイド.md` から `build_pdf.py` で生成（reportlab 利用、日本語フォント HeiseiKakuGo-W5 内蔵 CID）。
+
+```bash
+uv run --with reportlab python build_pdf.py
+```
+
+スタートガイド.md を編集したら必ず再生成してリポジトリにコミットする。
+
 ## 変更履歴
 
 - **v1.0.5** (2026-06-14): 引き渡し前最終テストで複数の重大バグを発見・修正。(1) `notion-search` のクエリ仕様: 汎用語（"案件" 等）では結果ゼロになり、データソース名（"案件DB" 等）を渡すと全件返ることが判明。tm-sync/pending/report/add-talent/add-client の全件取得を修正。(2) `最終sync日時` を DATE 型保存していたため人間編集保護が常時誤動作する不具合を修正。`is_datetime=1` の datetime 保存に。(3) `notion-fetch` には `last_edited_time` 相当のフィールドが無い旨、`notion-search` の `timestamp` を使うこと、API 編集では timestamp が更新されない可能性があり保護ロジックは best-effort であることを明記。(4) メタDB config レコードの取得手順を明確化
