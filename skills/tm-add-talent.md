@@ -9,8 +9,9 @@ friend の所属タレントをタレントDB に登録し、案件DB の Select
 
 # 前提コンテキストの取得
 
-1. `notion-search` で `task-manager 設定` を取得
-2. メタ情報DB から config レコードを `notion-fetch`:
+1. `notion-search(query="task-manager 設定", page_size=5)` で設定ページの page_id を取得
+2. `notion-fetch` で設定ページ → メタ情報DB の `data_source_id` を抽出（`META_DSID`）
+3. `notion-search(query="メタ情報DB", data_source_url="collection://"+META_DSID, page_size=5)` で config レコード（通常1件）を特定し、`notion-fetch` で:
    - 案件DB の data_source_id（`DEALS_DSID`）
    - タレントDB の data_source_id（`TALENTS_DSID`）
 

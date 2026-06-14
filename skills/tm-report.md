@@ -9,17 +9,18 @@ description: 直近7日間の案件動向を週次レポート形式で集計す
 
 # 前提コンテキストの取得
 
-1. `notion-search` で `task-manager 設定` を取得
-2. メタ情報DB から config レコードを `notion-fetch`:
+1. `notion-search(query="task-manager 設定", page_size=5)` で設定ページの page_id を取得
+2. `notion-fetch` で設定ページ → メタ情報DB の `data_source_id` を抽出（`META_DSID`）
+3. `notion-search(query="メタ情報DB", data_source_url="collection://"+META_DSID, page_size=5)` で config レコード（通常1件）を特定し、`notion-fetch` で:
    - 案件DB の data_source_id（`DEALS_DSID`）
 
 # 手順
 
 ## 1. 案件DB の全件取得（一括取得 → メモリで集計）
 
-Notion Connector の `notion-search` は意味検索ベースで、Boolean / 日付範囲 / `NOT IN` 等の構造化フィルタはサポートされない / 信頼性が低い。`notion-fetch` は ID 単位取得のみ。そのため次の手順を取る:
+Notion Connector の `notion-search` は意味検索ベースで、Boolean / 日付範囲 / `NOT IN` 等の構造化フィルタはサポートされない / 信頼性が低い。また `query` は **最小1文字必須**（空文字は API エラー）、かつ **汎用語ではほぼヒットせず、データソース名を渡すと全件返る** という仕様。`notion-fetch` は ID 単位取得のみ。そのため次の手順を取る:
 
-1. `notion-search` で `data_source_url` を `DEALS_DSID` に絞り、`query` は空文字（または `*`）で **案件DB全件取得**。`nextCursor` を辿ってページネーション対応。中断・完了案件も含めて取得する（集計対象は手順 2 以降でメモリ上の条件で絞る）。
+1. `notion-search(query="案件DB", data_source_url="collection://"+DEALS_DSID, page_size=25)` で案件DB全件取得。`start_cursor` でページネーション対応。中断・完了案件も含めて取得する（集計対象は手順 2 以降でメモリ上の条件で絞る）。
 2. 取得した全案件を以降の手順で **このSkill実行中の Claude 自身がメモリ上で集計** する。
 
 今日の日付を `TODAY`、7 日前を `WEEK_AGO` とする（タイムゾーン Asia/Tokyo）。
