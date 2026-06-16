@@ -9,7 +9,9 @@ friend の所属タレントをタレントDB に登録し、案件DB の Select
 
 # 前提コンテキストの取得
 
-1. `notion-search(query="task-manager 設定", page_size=5)` で設定ページの page_id を取得
+> 🚨 **セットアップ未完了の検知**: 下記手順 1〜3 のいずれかが 0件 / 見つからない場合は **即座に中断**し、「❌ task-manager のセットアップが完了していません。Claude Desktop で `/tm-setup` を実行してください」とユーザーに返す。
+
+1. `notion-search(query="task-manager 設定", page_size=5)` で設定ページの page_id を取得（0件なら中断）
 2. `notion-fetch` で設定ページ → メタ情報DB の `data_source_id` を抽出（`META_DSID`）
 3. `notion-search(query="メタ情報DB", data_source_url="collection://"+META_DSID, page_size=5)` で config レコード（通常1件）を特定し、`notion-fetch` で:
    - 案件DB の data_source_id（`DEALS_DSID`）
