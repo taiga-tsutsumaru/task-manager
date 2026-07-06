@@ -260,29 +260,37 @@ data_source_id を `META_DSID` として保持。
 
 `notion-create-view` を `parent_page_id=DASHBOARD_PAGE_ID` 指定で 2 回呼ぶ。`data_source_id` は `DEALS_DSID`。
 
-> **重要**: 埋め込みビューは **横スクロールを出さない**ことを最優先にする。
-> - board 型は ボール所在 4値で 4 列横並びになり、通常幅では収まらない → board は使わない
-> - table 型も列が多いと横スクロール → 表示プロパティを 4 つ程度に絞る
-> - list 型は縦に伸びるだけで横スクロール不要 → ボール別グループはリスト型で実現
+> **設計原則（v1.0.7 で全面改訂）**: ダッシュボードは「全部見せる」ではなく **「今日やることだけ見せる、残りは1クリック先」**。
+> - **FILTER を必ず使う**（`=` / `!=`、複数 FILTER 行の AND 結合が動作確認済み）。完了・中断案件をダッシュボードに出さない
+> - GROUP BY による全グループ縦積みは案件数増で巨大な壁になる → 使わない。🔴 だけ FILTER で切り出す
+> - board 型は 4 列横並びで収まらない → 使わない
+> - list 型は本文幅に必ず収まる。table 型は列幅合計が本文幅を超えると横スクロールが出る（列幅は API 制御不可）→ table を使う場合は 3 列以下 + 完了報告でページ全幅化を案内
 
-**埋め込みビュー1: 🎯 ボール別リスト**
+**埋め込みビュー1: 🔥 今すぐ対応**
 ```
-name: 🎯 ボール別リスト
+name: 🔥 今すぐ対応
 type: list
 configure:
-  GROUP BY "ボール所在"
-  SHOW "案件名", "案件概要", "ステータス", "次回アクション", "次回アクションの期日"
+  FILTER "ボール所在" = "🔴 自社対応中"
   SORT BY "次回アクションの期日" ASC
+  SHOW "次回アクション", "次回アクションの期日"
 ```
 
-**埋め込みビュー2: 📋 全案件一覧**
+自社が動くべき案件だけの短いリスト。朝ここだけ見れば良い。
+
+**埋め込みビュー2: ⏳ 相手待ち・進行中**
 ```
-name: 📋 全案件一覧
+name: ⏳ 相手待ち・進行中
 type: table
 configure:
-  SHOW "案件名", "ステータス", "ボール所在", "納期"
-  SORT BY "最終やり取り日" DESC
+  FILTER "ボール所在" != "🔴 自社対応中"
+  FILTER "ステータス" != "完了"
+  FILTER "ステータス" != "中断"
+  SORT BY "次回アクションの期日" ASC
+  SHOW "案件名", "ボール所在", "次回アクションの期日"
 ```
+
+アクティブだが自社ボールでない案件。3 列に絞って横スクロールを抑制。
 
 ### 6.5.3. ダッシュボードページを fetch してビューURLを取得
 
@@ -293,45 +301,43 @@ configure:
 <database url="https://www.notion.so/<HEX2>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
 ```
 
-順序は作成順 = `<HEX1>` がボール別リスト、`<HEX2>` が全案件一覧。これを `DASHBOARD_VIEW1_URL` / `DASHBOARD_VIEW2_URL` として保持。
+順序は作成順 = `<HEX1>` が 🔥 今すぐ対応、`<HEX2>` が ⏳ 相手待ち・進行中。これを `DASHBOARD_VIEW1_URL` / `DASHBOARD_VIEW2_URL` として保持。
 
 ### 6.5.4. ページ本文を最終構造に書き換え
 
 `notion-update-page(page_id=DASHBOARD_PAGE_ID, command="replace_content", allow_deleting_content=true, new_str=...)` を以下の内容で実行:
 
 ```markdown
-# 📋 task-manager
+# 📋 案件管理
 
-メールから案件を自動取り込み、Notion で進捗管理するハブページです。
-
-## 🚀 使い方
-
-- **朝の動き出し**: 下のリストで 🔴 自社対応中 のセクションから確認
-- **メール取り込み**: Claude Desktop で `/tm-sync` を実行
-- **詳しい操作**: `/tm-help` または USAGE.md 参照
-
----
-
-## 🎯 今動くべき案件（ボール別）
+## 🔥 今すぐ対応（こちらのボール）
 
 <database url="<DASHBOARD_VIEW1_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
 
----
-
-## 📋 全案件一覧
+## ⏳ 相手待ち・進行中
 
 <database url="<DASHBOARD_VIEW2_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
 
 ---
 
-## ⚙️ 設定・サブデータベース
-
-タレント／クライアント／メタ情報の管理は配下の設定ページにあります。
-
-<page url="<task-manager 設定ページのURL>">task-manager 設定</page>
+📖 **完了案件・全案件**は [案件DB](<案件DB の URL>) のタブ（📋一覧表 / 📊ステータスボード / 📅納期カレンダー）で。タレント・クライアント登録は [task-manager 設定](<task-manager 設定ページの URL>)。メール取り込みは Claude で `/tm-sync`（毎朝自動実行あり）。
 ```
 
-`<DASHBOARD_VIEW1_URL>` / `<DASHBOARD_VIEW2_URL>` / `<DEALS_DSID>` / `<task-manager 設定ページのURL>` は実際の値に置換。これで「🚀 使い方 → 🎯 ボール別リスト → 📋 全案件一覧 → ⚙️ 設定リンク」の順に並ぶ。
+`<DASHBOARD_VIEW1_URL>` / `<DASHBOARD_VIEW2_URL>` / `<DEALS_DSID>` / `<案件DB の URL>` / `<task-manager 設定ページの URL>` は実際の値に置換。
+
+> **注意（実機検証で判明）**:
+> - toggle ブロック（`> [!toggle]`）の中に `<page>` タグを入れるとレンダリングが崩れる。リンクは通常の Markdown リンク `[テキスト](URL)` を使う
+> - 使い方説明は長々と書かない。末尾に1行で十分（毎日見るページなので説明はノイズになる）
+
+### 6.5.5. 完了報告でページ全幅化を案内（手動1クリック）
+
+table 型ビューの列幅は API から制御できないため、環境によっては ⏳ テーブルがわずかに横スクロールすることがある。完了報告に以下を含めてユーザーに手動操作を案内する:
+
+```
+💡 見た目の最終調整（任意・30秒）:
+ダッシュボードページ右上の「…」メニュー →「左右の余白を縮小」を ON にすると、
+表が画面幅にきれいに収まります。
+```
 
 ### フォールバック
 
