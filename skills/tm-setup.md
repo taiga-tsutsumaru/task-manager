@@ -72,6 +72,7 @@ v1.0
 
 > **重要な制約**:
 > - DDL では Formula が **別の Formula を参照できない**（型エラーになる）。`会社取り分 = 受注金額 - タレント取り分` のような相互参照は不可。代わりに `会社取り分 = 受注金額 * (1 - 還元率)` のように **NUMBER だけで完結する式** で書く。
+> - `now()` を使った Formula（こちらの放置日数）は動作確認済み。Notion 側で毎日自動再計算されるため、AI が日次で数字を書き込む必要は無い。
 > - 文字列型は `TEXT` ではなく `RICH_TEXT` を使う。
 > - SELECT は `('値':color, '値2':color2, ...)` 形式で初期オプションを指定する（少なくとも 1 オプションは必須）。
 > - 自己参照 Relation は CREATE 時には指定できず、必ず CREATE 後に `ALTER` で追加する。
@@ -93,6 +94,10 @@ CREATE TABLE (
   "開始日" DATE,
   "納期" DATE,
   "最終やり取り日" DATE,
+  "最終受信日" DATE,
+  "こちらの放置日数" FORMULA('dateBetween(now(), prop("最終受信日"), "days")'),
+  "返信期日" DATE,
+  "重要度" SELECT('🔥 高':red, '中':yellow, '低':gray),
   "次回アクション" RICH_TEXT,
   "次回アクションの期日" DATE,
   "こちらの返信要否" CHECKBOX,
@@ -256,9 +261,9 @@ data_source_id を `META_DSID` として保持。
 
 このページの page_id を `DASHBOARD_PAGE_ID` として保持。
 
-### 6.5.2. 埋め込みリンクビューを2つ追加
+### 6.5.2. 埋め込みリンクビューを3つ追加
 
-`notion-create-view` を `parent_page_id=DASHBOARD_PAGE_ID` 指定で 2 回呼ぶ。`data_source_id` は `DEALS_DSID`。
+`notion-create-view` を `parent_page_id=DASHBOARD_PAGE_ID` 指定で 3 回呼ぶ。`data_source_id` は `DEALS_DSID`。
 
 > **設計原則（v1.0.7 で全面改訂）**: ダッシュボードは「全部見せる」ではなく **「今日やることだけ見せる、残りは1クリック先」**。
 > - **FILTER を必ず使う**（`=` / `!=`、複数 FILTER 行の AND 結合が動作確認済み）。完了・中断案件をダッシュボードに出さない
@@ -273,12 +278,26 @@ type: list
 configure:
   FILTER "ボール所在" = "🔴 自社対応中"
   SORT BY "次回アクションの期日" ASC
-  SHOW "次回アクション", "次回アクションの期日"
+  SHOW "次回アクション", "返信期日", "こちらの放置日数"
 ```
 
-自社が動くべき案件だけの短いリスト。朝ここだけ見れば良い。
+自社が動くべき案件だけの短いリスト。朝ここだけ見れば良い。返信期日（人が入力）と放置日数（自動計算）で優先順位が付く。
 
-**埋め込みビュー2: ⏳ 相手待ち・進行中**
+**埋め込みビュー2: ⭐ 重要案件**
+```
+name: ⭐ 重要案件
+type: list
+configure:
+  FILTER "重要度" = "🔥 高"
+  FILTER "ステータス" != "完了"
+  FILTER "ステータス" != "中断"
+  SORT BY "次回アクションの期日" ASC
+  SHOW "ステータス", "ボール所在", "返信期日", "こちらの放置日数"
+```
+
+重要度=🔥 高 の案件だけを別枠管理。重要度は人が案件ごとに設定する（AI は触らない）。
+
+**埋め込みビュー3: ⏳ 相手待ち・進行中**
 ```
 name: ⏳ 相手待ち・進行中
 type: table
@@ -287,10 +306,10 @@ configure:
   FILTER "ステータス" != "完了"
   FILTER "ステータス" != "中断"
   SORT BY "次回アクションの期日" ASC
-  SHOW "案件名", "ボール所在", "次回アクションの期日"
+  SHOW "案件名", "ボール所在", "こちらの放置日数"
 ```
 
-アクティブだが自社ボールでない案件。3 列に絞って横スクロールを抑制。
+アクティブだが自社ボールでない案件。放置日数で「相手がどれだけ沈黙しているか」が見える。3 列に絞って横スクロールを抑制。
 
 ### 6.5.3. ダッシュボードページを fetch してビューURLを取得
 
@@ -301,7 +320,7 @@ configure:
 <database url="https://www.notion.so/<HEX2>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
 ```
 
-順序は作成順 = `<HEX1>` が 🔥 今すぐ対応、`<HEX2>` が ⏳ 相手待ち・進行中。これを `DASHBOARD_VIEW1_URL` / `DASHBOARD_VIEW2_URL` として保持。
+順序は作成順 = `<HEX1>` が 🔥 今すぐ対応、`<HEX2>` が ⭐ 重要案件、`<HEX3>` が ⏳ 相手待ち・進行中。これを `DASHBOARD_VIEW1_URL` / `DASHBOARD_VIEW2_URL` / `DASHBOARD_VIEW3_URL` として保持。
 
 ### 6.5.4. ページ本文を最終構造に書き換え
 
@@ -314,9 +333,13 @@ configure:
 
 <database url="<DASHBOARD_VIEW1_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
 
-## ⏳ 相手待ち・進行中
+## ⭐ 重要案件
 
 <database url="<DASHBOARD_VIEW2_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
+
+## ⏳ 相手待ち・進行中
+
+<database url="<DASHBOARD_VIEW3_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
 
 ---
 
