@@ -329,6 +329,8 @@ configure:
 ```markdown
 # 📋 案件管理
 
+> 🕐 **最終更新: <セットアップ実行時刻を YYYY-MM-DD HH:MM 形式で>**　（メール取り込みのたびに自動で更新されます）
+
 ## 🔥 今すぐ対応（こちらのボール）
 
 <database url="<DASHBOARD_VIEW1_URL>" inline="true" data-source-url="collection://<DEALS_DSID>"></database>
@@ -345,6 +347,8 @@ configure:
 
 📖 **完了案件・全案件**は [案件DB](<案件DB の URL>) のタブ（📋一覧表 / 📊ステータスボード / 📅納期カレンダー）で。タレント・クライアント登録は [task-manager 設定](<task-manager 設定ページの URL>)。メール取り込みは Claude で `/tm-sync`（毎朝自動実行あり）。
 ```
+
+> **最終更新行の形式ルール**: `🕐 **最終更新: YYYY-MM-DD HH:MM**` は必ずこの形式で書く。tm-sync が sync のたびにこの行を今の時刻に置換する（tm-sync.md 手順 6.5 参照）。形式を変えると tm-sync 側の置換マッチが外れるので固定。
 
 `<DASHBOARD_VIEW1_URL>` / `<DASHBOARD_VIEW2_URL>` / `<DEALS_DSID>` / `<案件DB の URL>` / `<task-manager 設定ページの URL>` は実際の値に置換。
 

@@ -353,6 +353,23 @@ notion-update-page(
 
 > 注: 同日に 2 回 sync を回す場合: Gmail 検索 `after:YYYY/MM/DD` は日付単位のため 1 回目処理済みのメールも再取得対象になるが、手順 1-3 で構築した `PROCESSED_IDS` Set による既処理判定（手順 3-2）で重複は自動的にスキップされるため問題ない。
 
+## 6.5. ダッシュボードの「最終更新」表示を書き換え
+
+ユーザーが「AI がいつ Notion を更新したか」を一目で分かるよう、ダッシュボードページ最上部の「最終更新」行を今の時刻に書き換える。
+
+1. `notion-search(query="案件管理", page_size=5)` でダッシュボードページ（タイトル `案件管理`、📋 アイコン）を特定し `DASHBOARD_PAGE_ID` を取得
+2. `notion-update-page(command="update_content")` で最終更新行を置換:
+   ```
+   content_updates=[{
+     "old_str": "🕐 **最終更新: <LAST_SYNC を YYYY-MM-DD HH:MM 形式にした値>**",
+     "new_str": "🕐 **最終更新: <今の時刻を YYYY-MM-DD HH:MM 形式にした値>**"
+   }]
+   ```
+   - `<LAST_SYNC ...>` は手順 0 で読んだ前回 sync 日時。これを「YYYY-MM-DD HH:MM」（JST、秒なし）に整形すると、本文に前回書かれた文字列と一致する
+   - 表示形式は必ず「YYYY-MM-DD HH:MM」で統一（本文とメタ情報DBで形式が揃っていないと次回 old_str がマッチしない）
+
+> **フォールバック**: old_str がマッチしない場合（初回、フォーマットずれ、行が消された等）は、`insert_content(position={"type":"start"})` で最終更新行を先頭に補う、もしくは `notion-fetch` で現状本文を確認してから該当行を組み立て直す。マッチ失敗しても sync 本体の成否には影響しないので、警告レベルで扱う。
+
 ## 7. 結果レポート出力
 
 ```
